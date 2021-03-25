@@ -7,32 +7,14 @@ require_relative 'lib/slack'
 require_relative 'lib/twitter'
 
 # Sites
-require_relative 'lib/sites/ma_immunizations'
-require_relative 'lib/sites/curative'
-require_relative 'lib/sites/color'
+require_relative 'lib/sites/vaccinate_ri'
 require_relative 'lib/sites/cvs'
-require_relative 'lib/sites/lowell_general'
-require_relative 'lib/sites/my_chart'
-require_relative 'lib/sites/zocdoc'
-require_relative 'lib/sites/acuity'
-require_relative 'lib/sites/trinity_health'
-require_relative 'lib/sites/southcoast'
-require_relative 'lib/sites/northhampton'
 
 UPDATE_FREQUENCY = ENV['UPDATE_FREQUENCY']&.to_i || 60 # seconds
 
 SCRAPERS = {
-  'curative' => Curative,
-  'color' => Color,
   'cvs' => Cvs,
-  'lowell_general' => LowellGeneral,
-  'my_chart' => MyChart,
-  'ma_immunizations' => MaImmunizations,
-  'zocdoc' => Zocdoc,
-  'acuity' => Acuity,
-  'trinity_health' => TrinityHealth,
-  'southcoast' => Southcoast,
-  'northhampton' => Northhampton,
+  'vaccinate_ri' => VaccinateRI,
 }.freeze
 
 def all_clinics(scrapers, storage, logger)
@@ -48,13 +30,6 @@ def all_clinics(scrapers, storage, logger)
       yield scraper_module.all_clinics(storage, logger)
     end
   end
-end
-
-def sleep_for(frequency)
-  start_time = Time.now
-  yield
-  running_time = Time.now - start_time
-  sleep([frequency - running_time, 0].max)
 end
 
 def main(scrapers: 'all')
@@ -78,24 +53,23 @@ def main(scrapers: 'all')
   logger.info "[Main] Update frequency is set to every #{UPDATE_FREQUENCY} seconds"
 
   if ENV['SEED_REDIS']
-    sleep_for(UPDATE_FREQUENCY) do
-      logger.info '[Main] Seeding redis with current appointments'
-      all_clinics(scrapers, storage, logger) { |clinics| clinics.each(&:save_appointments) }
-      logger.info '[Main] Done seeding redis'
-    end
+    logger.info '[Main] Seeding redis with current appointments'
+    all_clinics(scrapers, storage, logger) { |clinics| clinics.each(&:save_appointments) }
+    logger.info '[Main] Done seeding redis'
+    sleep(UPDATE_FREQUENCY)
   end
 
   loop do
-    sleep_for(UPDATE_FREQUENCY) do
-      logger.info '[Main] Started checking'
-      all_clinics(scrapers, storage, logger) do |clinics|
-        slack.post(clinics)
-        twitter.post(clinics)
+    logger.info '[Main] Started checking'
+    all_clinics(scrapers, storage, logger) do |clinics|
+      slack.post(clinics)
+      twitter.post(clinics)
 
-        clinics.each(&:save_appointments)
-      end
-      logger.info '[Main] Done checking'
+      clinics.each(&:save_appointments)
     end
+
+    logger.info '[Main] Done checking'
+    sleep(UPDATE_FREQUENCY)
   end
 
 rescue => e

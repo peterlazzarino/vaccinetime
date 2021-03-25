@@ -1,12 +1,14 @@
 require 'date'
 require 'json'
 require 'rest-client'
+require 'csv'
 
 require_relative './base_clinic'
 
 module Cvs
-  STATE = 'MA'
+  STATE = 'RI'
   USER_AGENTS = []
+  CVS_CITIES = {}
 
   class CvsCity
     attr_reader :city, :stores, :should_tweet
@@ -23,6 +25,15 @@ module Cvs
       USER_AGENTS.append(line.strip)
     end
   end
+
+  CSV.read("#{__dir__}/config/cvs_locations.csv", headers: true).each do |row|
+    CVS_CITIES[row['city']] = CvsCity.new(row['city'], row['stores'].to_i, row['tweet'] == '1')
+  end
+
+  # This array also defines the order in which city names appear, the order is determined
+  # by the number of stores in a city.
+  TWEET_ALLOWED_CITIES = CVS_CITIES.keys.filter { |cvs_city| CVS_CITIES[cvs_city].should_tweet }
+                                   .sort_by { |cvs_city| -1 * CVS_CITIES[cvs_city].stores }
 
   def self.all_clinics(storage, logger)
     clinics = []
@@ -53,7 +64,7 @@ module Cvs
 
     def initialize(storage, cities, state)
       super(storage)
-      @cities = cities.sort
+      @cities = cities.sort_by { |city| -1 * (CVS_CITIES[city].nil? ? 1 : CVS_CITIES[city].stores) }
       @state = state
       @appointments = @cities.length
     end
@@ -128,8 +139,12 @@ module Cvs
       @cities - last_cities
     end
 
+    def tweet_allowed_new_cities
+      new_cities.filter { |new_city| TWEET_ALLOWED_CITIES.include? new_city }
+    end
+
     def should_tweet?
-      new_cities.length > 5 && has_not_posted_recently?
+      tweet_allowed_new_cities.length > 5 && has_not_posted_recently?
     end
   end
 
@@ -159,7 +174,6 @@ module Cvs
     end
 
     def cities_with_appointments(logger)
-      logger.info "[CVS] Checking status for all cities in #{@state}"
       headers = {
         :Referer => "https://www.cvs.com/immunizations/covid-19-vaccine?icid=cvs-home-hero1-banner-1-link2-coronavirus-vaccine",
         :user_agent => @user_agent,
@@ -171,6 +185,7 @@ module Cvs
         logger.error "[CVS] Failed to get state status for #{@state}: #{e}"
         return []
       end
+      logger.info response['responsePayloadData']
       if response['responsePayloadData'].nil? || response['responsePayloadData']['data'].nil? ||
         response['responsePayloadData']['data'][@state].nil?
         logger.warn "[CVS] Response for state status missing 'responsePayloadData.data.#{@state}' field: #{response}"

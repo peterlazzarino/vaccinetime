@@ -7,8 +7,8 @@ require 'sentry-ruby'
 require_relative '../sentry_helper'
 require_relative './base_clinic'
 
-module MaImmunizations
-  BASE_URL = "https://clinics.maimmunizations.org/clinic/search?q[services_name_in][]=Vaccination".freeze
+module VaccinateRI
+  BASE_URL = "https://www.vaccinateri.org/clinic/search".freeze
 
   def self.all_clinics(storage, logger)
     unconsolidated_clinics(storage, logger).each_with_object({}) do |clinic, h|
@@ -23,28 +23,26 @@ module MaImmunizations
   def self.unconsolidated_clinics(storage, logger)
     page_num = 1
     clinics = []
-    SentryHelper.catch_errors(logger, 'MaImmunizations', on_error: clinics) do
-      loop do
+    loop do
+      SentryHelper.catch_errors(logger, 'VaccinateRI', on_error: clinics) do
         raise "Too many pages: #{page_num}" if page_num > 100
 
-        logger.info "[MaImmunizations] Checking page #{page_num}"
         page = Page.new(page_num, storage, logger)
         page.fetch
         return clinics if page.waiting_page
 
         clinics += page.clinics
         return clinics if page.final_page?
-
-        page_num += 1
-        sleep(2)
       end
+
+      page_num += 1
+      sleep(2)
     end
-    clinics
   end
 
   class Page
     CLINIC_PAGE_IDENTIFIER = /Find a Vaccination Clinic/.freeze
-    COOKIE_SITE = 'ma-immunization'.freeze
+    COOKIE_SITE = 'vaccinate-ri'.freeze
 
     attr_reader :waiting_page
 
@@ -52,34 +50,13 @@ module MaImmunizations
       @page = page
       @storage = storage
       @logger = logger
-      @waiting_page = true
+      @waiting_page = false
     end
 
     def fetch
-      cookies = get_cookies
-      response = RestClient.get(BASE_URL + "&page=#{@page}", cookies: cookies).body
+      cookies = get_cookies     
 
-      if CLINIC_PAGE_IDENTIFIER !~ response
-        @logger.info '[MaImmunizations] Got waiting page'
-        12.times do
-          response = RestClient.get(BASE_URL + "&page=#{@page}", cookies: cookies).body
-          break if CLINIC_PAGE_IDENTIFIER =~ response
-
-          sleep(5)
-        end
-      end
-
-      if CLINIC_PAGE_IDENTIFIER =~ response
-        @logger.info '[MaImmunizations] Made it through waiting page'
-        @waiting_page = false
-      else
-        minutes_left = /estimated wait time is\s*([\d\w\s]+)\./.match(response.gsub('\n', ''))
-        if minutes_left
-          @logger.info "[MaImmunizations] Waited too long, estimate left: #{minutes_left[1]}"
-        else
-          @logger.info '[MaImmunizations] Waited too long, no estimate found'
-        end
-      end
+      response = RestClient.get(BASE_URL, cookies: cookies).body 
 
       @doc = Nokogiri::HTML(response)
     end
@@ -91,12 +68,9 @@ module MaImmunizations
         cookie_expiration = Time.parse(existing_cookies['expiration'])
         # use existing cookies unless they're expired
         if cookie_expiration > Time.now
-          @logger.info '[MaImmunizations] Using existing cookies'
           return cookies
         end
       end
-
-      @logger.info '[MaImmunizations] Getting new cookies'
       response = RestClient.get(BASE_URL, cookies: cookies)
       new_cookies = response.cookies
       cookie_expiration = response.cookie_jar.map(&:expires_at).compact.min
@@ -110,27 +84,23 @@ module MaImmunizations
 
     def clinics
       container = @doc.search('.main-container > div')[1]
-
       unless container
-        @logger.warn "[MaImmunizations] Couldn't find main page container!"
         return []
       end
 
       results = container.search('> div.justify-between').map do |group|
-        Clinic.new(group, @storage)
+        Clinic.new(group, @logger, @storage)
       end.filter do |clinic|
         clinic.valid?
       end
 
       unless results.any?
-        Sentry.capture_message("[MaImmunizations] Couldn't find any clinics!")
-        @logger.warn "[MaImmunizations] Couldn't find any clinics!"
+        Sentry.capture_message("[VaccinateRI] Couldn't find any clinics!")
       end
 
       results.filter do |clinic|
         clinic.appointments.positive?
       end.each do |clinic|
-        @logger.info "[MaImmunizations] Site #{clinic.title}: found #{clinic.appointments} appointments (link: #{!clinic.link.nil?})"
       end
 
       results
@@ -142,9 +112,10 @@ module MaImmunizations
 
     attr_accessor :appointments
 
-    def initialize(group, storage)
+    def initialize(group, logger, storage)
       super(storage)
       @group = group
+      @logger = logger
       @paragraphs = group.search('p')
       @parsed_info = @paragraphs[2..].each_with_object({}) do |p, h|
         match = /^([\w\d\s]+):\s+(.+)$/.match(p.content)
@@ -152,11 +123,11 @@ module MaImmunizations
 
         h[match[1].strip] = match[2].strip
       end
-      @appointments = @parsed_info['Available Appointments'].to_i
+      @appointments = @parsed_info['Appointments Available or Currently Being Booked'].to_i
     end
 
     def valid?
-      @parsed_info.key?('Available Appointments')
+      @parsed_info.key?('Appointments Available or Currently Being Booked')
     end
 
     def to_s
@@ -194,7 +165,7 @@ module MaImmunizations
       a_tag = @paragraphs.last.search('a')
       return nil unless a_tag.any?
 
-      'https://www.maimmunizations.org' + a_tag[0]['href']
+      'https://www.vaccinateri.org' + a_tag[0]['href']
     end
 
     def name
@@ -224,7 +195,7 @@ module MaImmunizations
     end
 
     def sign_up_page
-      addr = 'https://www.maimmunizations.org/clinic/search?'
+      addr = 'https://www.vaccinateri.org/clinic/search?'
       addr += "q[venue_search_name_or_venue_name_i_cont]=#{name}&" if name
       URI.parse(addr)
     end
