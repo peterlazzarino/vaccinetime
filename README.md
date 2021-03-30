@@ -1,8 +1,8 @@
-# vaccinetime
-
+# vaccinetime RI
+ 
 https://twitter.com/vaccinetime/
 
-This bot checks Massachusetts vaccine appointment sites every minute and posts
+This bot checks Rhode Island vaccine appointment sites every minute and posts
 on Twitter when new appointments show up. The bot is written in
 [Ruby](https://www.ruby-lang.org/en/).
 
@@ -10,17 +10,8 @@ on Twitter when new appointments show up. The bot is written in
 
 The following websites are currently checked:
 
-* https://www.maimmunizations.org - every site
-* https://curative.com - DoubleTree Hotel in Danvers, Eastfield Mall in Springfield, and Circuit City in Dartmouth
-* https://home.color.com - Natick Mall, Reggie Lewis Center, Gillette Stadium, Fenway Park, Hynes Convention Center
-* https://www.cvs.com - CVS pharmacies in MA
-* https://www.lowellgeneralvaccine.com - Lowell General Hospital
-* MyChart - UMass Memorial, SBCHC, BMC
-* https://www.tuftsmcvaccine.org - Tufts Medical Center Vaccine Site
-* https://www.harringtonhospital.org - Southbridge Community Center
-* https://www.trinityhealthofne.org - Trinity Health of New England
-* https://www.southcoast.org - Southcoast Health
-* https://www.northamptonma.gov/2219/Vaccine-Clinics - Northampton
+* https://www.vaccinate-ri.org - every site
+* https://www.cvs.com - CVS pharmacies in RI
 
 ## Quick start
 
