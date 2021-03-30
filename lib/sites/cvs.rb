@@ -185,7 +185,6 @@ module Cvs
         logger.error "[CVS] Failed to get state status for #{@state}: #{e}"
         return []
       end
-      logger.info response['responsePayloadData']
       if response['responsePayloadData'].nil? || response['responsePayloadData']['data'].nil? ||
         response['responsePayloadData']['data'][@state].nil?
         logger.warn "[CVS] Response for state status missing 'responsePayloadData.data.#{@state}' field: #{response}"

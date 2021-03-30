@@ -23,21 +23,23 @@ module VaccinateRI
   def self.unconsolidated_clinics(storage, logger)
     page_num = 1
     clinics = []
-    loop do
-      SentryHelper.catch_errors(logger, 'VaccinateRI', on_error: clinics) do
+    SentryHelper.catch_errors(logger, 'VaccinateRI', on_error: clinics) do
+      loop do
         raise "Too many pages: #{page_num}" if page_num > 100
 
+        logger.info "[VaccinateRI] Checking page #{page_num}"
         page = Page.new(page_num, storage, logger)
         page.fetch
         return clinics if page.waiting_page
 
         clinics += page.clinics
         return clinics if page.final_page?
-      end
 
-      page_num += 1
-      sleep(2)
+        page_num += 1
+        sleep(2)
+      end
     end
+    clinics
   end
 
   class Page
