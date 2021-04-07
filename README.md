@@ -1,6 +1,6 @@
 # vaccinetime RI
- 
-https://twitter.com/vaccinetime/
+
+ https://twitter.com/VaccinetimeRI
 
 This bot checks Rhode Island vaccine appointment sites every minute and posts
 on Twitter when new appointments show up. The bot is written in
