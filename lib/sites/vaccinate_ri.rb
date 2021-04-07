@@ -57,8 +57,8 @@ module VaccinateRI
 
     def fetch
       cookies = get_cookies     
-
-      response = RestClient.get(BASE_URL, cookies: cookies).body 
+      @logger.info BASE_URL + "&page=#{@page}"
+      response = RestClient.get(BASE_URL + "?page=#{@page}", cookies: cookies).body 
 
       @doc = Nokogiri::HTML(response)
     end
@@ -73,7 +73,7 @@ module VaccinateRI
           return cookies
         end
       end
-      response = RestClient.get(BASE_URL, cookies: cookies)
+      response = RestClient.get(BASE_URL + "?page=#{@page}", cookies: cookies)
       new_cookies = response.cookies
       cookie_expiration = response.cookie_jar.map(&:expires_at).compact.min
       @storage.save_cookies(COOKIE_SITE, new_cookies, cookie_expiration)
@@ -81,6 +81,7 @@ module VaccinateRI
     end
 
     def final_page?
+      @logger.info @doc.search('.page.next')
       @doc.search('.page.next').empty? || @doc.search('.page.next.disabled').any?
     end
 
